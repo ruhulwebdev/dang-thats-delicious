@@ -49,10 +49,11 @@ router.post(
   authController.validateToken,
   catchErrors(authController.update),
 )
-
+router.get("/map", storeController.getMap)
 //////////////////////////////////////////////////
 // API
 /////////////////////////////////////////////////
 router.get("/api/search", catchErrors(storeController.searchStores))
+router.get("/api/store/near", catchErrors(storeController.storeNearBy))
 
 module.exports = router

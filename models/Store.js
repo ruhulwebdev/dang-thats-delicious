@@ -50,6 +50,10 @@ schema.index({
   description: "text",
 })
 
+schema.index({
+  location: "2dsphere",
+})
+
 schema.pre("save", async function(next) {
   if (!this.isModified("name")) return next()
 

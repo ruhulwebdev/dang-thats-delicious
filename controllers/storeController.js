@@ -117,3 +117,28 @@ exports.searchStores = async (req, res) => {
 
   res.json(stores)
 }
+
+exports.storeNearBy = async (req, res) => {
+  const coordinates = [req.query.lng, req.query.lat].map(parseFloat)
+  const q = {
+    location: {
+      $near: {
+        $geometry: {
+          type: "Point",
+          coordinates,
+        },
+        $maxDistance: 10000,
+      },
+    },
+  }
+
+  const stores = await Store.find(q)
+    .select("photo slug name description location")
+    .limit(10)
+
+  res.json(stores)
+}
+
+exports.getMap = async (req, res) => {
+  res.render("map.pug", {title: "Map"})
+}
