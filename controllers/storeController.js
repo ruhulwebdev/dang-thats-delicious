@@ -38,6 +38,7 @@ exports.resize = async (req, res, next) => {
 }
 
 exports.addStore = async (req, res) => {
+  req.body.author = req.user._id
   const store = await new Store(req.body).save()
   req.flash(
     "success",
@@ -51,8 +52,13 @@ exports.getStores = async (req, res) => {
   res.render("stores", {title: "Stores", stores})
 }
 
+const isOwner = (author, user) => {
+  if (!author.equals(user._id)) throw new Error("You are not the owner!")
+}
+
 exports.editStore = async (req, res) => {
-  const store = await Store.findOne({_id: req.params.id})
+  const store = await Store.findOne({_id: req.params.id}).populate("author")
+  isOwner(store.author._id, req.user)
   res.render("edit", {title: `Edit ${store.name}`, store})
 }
 
@@ -72,5 +78,42 @@ exports.updateStore = async (req, res) => {
     }">See store</a>`,
   )
   // redirect to the same route
-  res.redirect(`/stores/${store._id}/edit`)
+  res.redirect(`/store/${store._id}/edit`)
+}
+
+// get a single store
+exports.getStore = async (req, res) => {
+  const store = await Store.findOne({slug: req.params.slug})
+  res.render("singleStore", {store, title: store.name})
+}
+
+exports.getTags = async (req, res) => {
+  const tag = req.params.tag
+  const tagsQuery = Store.getTagsGroup()
+  const storesQuery = Store.find({tags: tag || {$exists: true}})
+  const [tags, stores] = await Promise.all([tagsQuery, storesQuery])
+  res.render("tag", {title: "Tags", tags, tag, stores})
+}
+
+//////////////////////////////////////////////////
+// API
+/////////////////////////////////////////////////
+exports.searchStores = async (req, res) => {
+  // find the stores
+  const stores = await Store.find(
+    {
+      $text: {
+        $search: req.query.q,
+      },
+    },
+    {
+      score: {$meta: "textScore"},
+    },
+  )
+    .sort({
+      score: {$meta: "textScore"},
+    })
+    .limit(5)
+
+  res.json(stores)
 }
