@@ -3,3 +3,4 @@ variables.env
 .DS_Store
 *.log
 .idea
+variables.env.now
