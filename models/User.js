@@ -1,33 +1,36 @@
 const mongoose = require("mongoose")
-const passportLocal = require("passport-local-mongoose")
-const errorHandler = require("mongoose-mongodb-errors")
-const validator = require("validator")
+const Schema = mongoose.Schema
+mongoose.Promise = global.Promise
 const md5 = require("md5")
+const validator = require("validator")
+const mongodbErrorHandler = require("mongoose-mongodb-errors")
+const passportLocalMongoose = require("passport-local-mongoose")
 
-const UserScema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-  },
+const userSchema = new Schema({
   email: {
     type: String,
     unique: true,
-    required: "You have to enter a valid email",
     lowercase: true,
     trim: true,
     validate: [validator.isEmail, "Invalid Email Address"],
+    required: "Please Supply an email address",
   },
-  resetToken: String,
-  expireDate: Date,
+  name: {
+    type: String,
+    required: "Please supply a name",
+    trim: true,
+  },
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
+  hearts: [{type: mongoose.Schema.ObjectId, ref: "Store"}],
 })
 
-UserScema.virtual("gravatar").get(function() {
+userSchema.virtual("gravatar").get(function() {
   const hash = md5(this.email)
   return `https://gravatar.com/avatar/${hash}?s=200`
 })
 
-UserScema.plugin(passportLocal, {usernameField: "email"})
-UserScema.plugin(errorHandler)
+userSchema.plugin(passportLocalMongoose, {usernameField: "email"})
+userSchema.plugin(mongodbErrorHandler)
 
-module.exports = mongoose.model("User", UserScema)
+module.exports = mongoose.model("User", userSchema)

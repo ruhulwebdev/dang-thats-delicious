@@ -1,9 +1,10 @@
 const nodemailer = require("nodemailer")
 const pug = require("pug")
+const juice = require("juice")
+const htmlToText = require("html-to-text")
 const promisify = require("es6-promisify")
-const htmltotext = require("html-to-text")
 
-var transport = nodemailer.createTransport({
+const transport = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
   port: process.env.MAIL_PORT,
   auth: {
@@ -12,22 +13,26 @@ var transport = nodemailer.createTransport({
   },
 })
 
-const renderPug = (filename, options) => {
-  return pug.renderFile(`${__dirname}/../views/email/${filename}.pug`, options)
+const generateHTML = (filename, options = {}) => {
+  const html = pug.renderFile(
+    `${__dirname}/../views/email/${filename}.pug`,
+    options,
+  )
+  const inlined = juice(html)
+  return inlined
 }
 
-exports.send = async opts => {
-  const html = renderPug(opts.templateName, opts)
-  const text = htmltotext.fromString(html)
+exports.send = async options => {
+  const html = generateHTML(options.filename, options)
+  const text = htmlToText.fromString(html)
 
   const mailOptions = {
-    from: "Ruhul Amin <noreply@ruhulamin.com",
-    to: opts.user.email,
-    subject: opts.subject,
+    from: `Wes Bos <noreply@wesbos.com>`,
+    to: options.user.email,
+    subject: options.subject,
     html,
     text,
   }
-
   const sendMail = promisify(transport.sendMail, transport)
   return sendMail(mailOptions)
 }

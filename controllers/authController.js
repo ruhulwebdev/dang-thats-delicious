@@ -1,102 +1,101 @@
 const passport = require("passport")
-const mongoose = require("mongoose")
 const crypto = require("crypto")
-const promis = require("es6-promisify")
-const mail = require("../handlers/mail")
-
+const mongoose = require("mongoose")
 const User = mongoose.model("User")
+const promisify = require("es6-promisify")
+const mail = require("../handlers/mail")
 
 exports.login = passport.authenticate("local", {
   failureRedirect: "/login",
-  successFlash: "Successfully logged in",
+  failureFlash: "Failed Login!",
   successRedirect: "/",
-  failureFlash: "Failed Login",
+  successFlash: "You are now logged in!",
 })
 
 exports.logout = (req, res) => {
   req.logout()
-  req.flash("success", "You are now logged out!")
+  req.flash("success", "You are now logged out! 👋")
   res.redirect("/")
 }
 
 exports.isLoggedIn = (req, res, next) => {
+  // first check if the user is authenticated
   if (req.isAuthenticated()) {
-    return next()
+    next() // carry on! They are logged in!
+    return
   }
-  req.flash("error", "You must be logged in to access this page")
+  req.flash("error", "Oops you must be logged in to do that!")
   res.redirect("/login")
 }
 
-// validate the token
-exports.validateToken = async (req, res, next) => {
+exports.forgot = async (req, res) => {
+  // 1. See if a user with that email exists
+  const user = await User.findOne({email: req.body.email})
+  if (!user) {
+    req.flash("error", "No account with that email exists.")
+    return res.redirect("/login")
+  }
+  // 2. Set reset tokens and expiry on their account
+  user.resetPasswordToken = crypto.randomBytes(20).toString("hex")
+  user.resetPasswordExpires = Date.now() + 3600000 // 1 hour from now
+  await user.save()
+  // 3. Send them an email with the token
+  const resetURL = `http://${req.headers.host}/account/reset/${
+    user.resetPasswordToken
+  }`
+  await mail.send({
+    user,
+    filename: "password-reset",
+    subject: "Password Reset",
+    resetURL,
+  })
+  req.flash("success", `You have been emailed a password reset link.`)
+  // 4. redirect to login page
+  res.redirect("/login")
+}
+
+exports.reset = async (req, res) => {
   const user = await User.findOne({
-    resetToken: req.params.token,
-    expireDate: {$gt: Date.now()},
+    resetPasswordToken: req.params.token,
+    resetPasswordExpires: {$gt: Date.now()},
+  })
+  if (!user) {
+    req.flash("error", "Password reset is invalid or has expired")
+    return res.redirect("/login")
+  }
+  // if there is a user, show the rest password form
+  res.render("reset", {title: "Reset your Password"})
+}
+
+exports.confirmedPasswords = (req, res, next) => {
+  if (req.body.password === req.body["password-confirm"]) {
+    next() // keepit going!
+    return
+  }
+  req.flash("error", "Passwords do not match!")
+  res.redirect("back")
+}
+
+exports.update = async (req, res) => {
+  const user = await User.findOne({
+    resetPasswordToken: req.params.token,
+    resetPasswordExpires: {$gt: Date.now()},
   })
 
   if (!user) {
-    req.flash("error", "Invalid or expired token")
+    req.flash("error", "Password reset is invalid or has expired")
     return res.redirect("/login")
   }
 
-  // pass the user to the next middleware
-  req.resetUser = user
-
-  next()
-}
-
-exports.reset = (req, res) => res.render("reset", {title: "Update password"})
-
-exports.update = async (req, res) => {
-  req
-    .checkBody("password-confirm", "Confirmed password cannot be blank")
-    .notEmpty()
-  req
-    .checkBody("password-confirm", "Passwords do not match")
-    .equals(req.body.password)
-
-  const errors = req.validationErrors()
-
-  if (errors) {
-    req.flash("error", "Passwords do not match")
-    res.redirect("back")
-  }
-
-  const user = req.resetUser
-
-  const setPassword = promis(user.setPassword, user)
+  const setPassword = promisify(user.setPassword, user)
   await setPassword(req.body.password)
-
-  user.resetToken = undefined
-  user.expireDate = undefined
+  user.resetPasswordToken = undefined
+  user.resetPasswordExpires = undefined
   const updatedUser = await user.save()
-  req.login(updatedUser)
-
-  req.flash("success", "Successfully updated your password")
+  await req.login(updatedUser)
+  req.flash(
+    "success",
+    "💃 Nice! Your password has been reset! You are now logged in!",
+  )
   res.redirect("/")
-}
-
-// reset password workflow
-exports.forgot = async (req, res) => {
-  // does email exist
-  const user = await User.findOne({email: req.body.email})
-  if (!user) {
-    req.flash("error", "There's no account associated with that email")
-    return res.redirect("back")
-  }
-  // if so then create a token and expire date and save it to the user db
-  user.resetToken = crypto.randomBytes(20).toString("hex")
-  user.expireDate = Date.now() + 36000000
-  await user.save()
-
-  const resetURL = `http://${req.headers.host}/account/reset/${user.resetToken}`
-  await mail.send({
-    user,
-    subject: "Reset your password",
-    templateName: "password-reset",
-    resetURL,
-  })
-
-  req.flash("success", `Please check your inbox for the password reset url!`)
-  res.redirect("back")
 }

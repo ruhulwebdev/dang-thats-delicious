@@ -13,6 +13,7 @@ mongoose.connection.on("error", err => {
 // import all of our models
 require("./models/Store")
 require("./models/User")
+require("./models/Review")
 
 // import nodemailer
 require("./handlers/mail")
